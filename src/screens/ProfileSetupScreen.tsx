@@ -1,3 +1,4 @@
+// ProfileSetupScreen.tsx
 import React, { useState } from 'react';
 import { 
   View, 
@@ -9,50 +10,95 @@ import {
   ScrollView,
   Modal,
   Alert,
-  KeyboardAvoidingView,       // <-- NUEVO
-  Platform,                   // <-- NUEVO
-  TouchableWithoutFeedback,   // <-- NUEVO
-  Keyboard                    // <-- NUEVO
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { pacienteService } from '../services/pacienteService';
 
 export default function ProfileSetupScreen({ navigation }: any) {
   const [selectedGender, setSelectedGender] = useState<string | null>(null);
   const [isModalVisible, setModalVisible] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const [nombre, setNombre] = useState<string>('');
   const [edad, setEdad] = useState<string>('');
   const [peso, setPeso] = useState<string>('');
   const [altura, setAltura] = useState<string>('');
 
+  // ✅ Guardar género seleccionado
   const handleGenderSelect = (gender: string) => {
     setSelectedGender(gender);
-    setModalVisible(true); 
+    setModalVisible(true);
   };
 
-  // --- LÓGICA DE VALIDACIÓN ---
-  const handleContinue = () => {
-    // 1. Verificamos si eligió género
-    if (!selectedGender) {
-      Alert.alert(
-        "Falta información", 
-        "Por favor, selecciona si eres hombre o mujer para poder personalizar tu receta."
-      );
-      return; // Detiene la función aquí
+  // ✅ Guardar datos del perfil en el backend
+  const handleSaveProfile = async () => {
+    // Validar campos
+    if (!nombre.trim() || !edad.trim() || !peso.trim() || !altura.trim()) {
+      Alert.alert('Datos incompletos', 'Por favor completa todos los campos');
+      return;
     }
 
-    // 2. Verificamos si llenó los datos físicos
-    if (!nombre.trim() || !edad.trim() || !peso.trim() || !altura.trim()) {
+    if (!selectedGender) {
+      Alert.alert('Error', 'Selecciona un género');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = {
+        nombre: nombre.trim(),
+        edad: parseInt(edad),
+        peso: parseFloat(peso),
+        altura: parseFloat(altura),
+        genero: selectedGender === 'MASCULINO' ? 'masculino' : 'femenino',
+      };
+
+      console.log('📤 Enviando datos al backend:', data);
+
+      const response = await pacienteService.actualizarPerfil(data);
+
+      if (response.success) {
+        console.log('✅ Perfil guardado:', response.data);
+        Alert.alert('¡Excelente!', 'Datos guardados correctamente');
+        Keyboard.dismiss();
+        setModalVisible(false);
+        navigation.navigate('Diagnosis');
+      } else {
+        Alert.alert('Error', response.message || 'Error al guardar datos');
+      }
+    } catch (error) {
+      console.error('❌ Error:', error);
+      Alert.alert('Error', 'Error al conectar con el servidor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Continuar (validar antes de ir a Diagnosis)
+  const handleContinue = () => {
+    if (!selectedGender) {
       Alert.alert(
-        "Datos incompletos", 
-        "Necesitamos tus datos físicos para continuar.",
-        [
-          { text: "Completar ahora", onPress: () => setModalVisible(true) } // Abre el modal automáticamente
-        ]
+        'Falta información',
+        'Por favor, selecciona tu género para poder personalizar tu receta.'
       );
       return;
     }
 
+    if (!nombre.trim() || !edad.trim() || !peso.trim() || !altura.trim()) {
+      Alert.alert(
+        'Datos incompletos',
+        'Necesitamos tus datos físicos para continuar.',
+        [{ text: 'Completar ahora', onPress: () => setModalVisible(true) }]
+      );
+      return;
+    }
+
+<<<<<<< HEAD
     // 3. Si todo está correcto, armamos el JSON
     const dataParaElBackend = {
       nombre: nombre,
@@ -65,6 +111,9 @@ export default function ProfileSetupScreen({ navigation }: any) {
     console.log("¡Éxito! JSON listo para enviar:", dataParaElBackend);
     Alert.alert("¡Excelente!", "Datos guardados correctamente.");
     navigation.navigate('HasDiagnosis');
+=======
+    navigation.navigate('Diagnosis');
+>>>>>>> dfcbd1c (realizado las conexiones del login , registro de datos de Paciente ,Profile)
   };
 
   return (
@@ -78,7 +127,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
         <View style={styles.topSection}>
           <View style={styles.header}>
             <Text style={styles.brandText}>NaturMD</Text>
@@ -86,14 +134,14 @@ export default function ProfileSetupScreen({ navigation }: any) {
           </View>
 
           <View style={styles.genderContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.genderButton, styles.maleButton, selectedGender === 'MASCULINO' && styles.selectedButton]}
               onPress={() => handleGenderSelect('MASCULINO')}
             >
               <Text style={styles.genderText}>👨 SOY HOMBRE</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.genderButton, styles.femaleButton, selectedGender === 'FEMENINO' && styles.selectedButton]}
               onPress={() => handleGenderSelect('FEMENINO')}
             >
@@ -104,17 +152,12 @@ export default function ProfileSetupScreen({ navigation }: any) {
 
         <View style={styles.spacer} />
 
-        {/* El botón ahora SIEMPRE está habilitado y ejecuta las validaciones al tocarlo */}
-        <TouchableOpacity 
-          style={styles.continueButton}
-          onPress={handleContinue}
-        >
+        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
           <Text style={styles.continueButtonText}>CONTINUAR</Text>
         </TouchableOpacity>
-        
       </ScrollView>
 
-      {/* --- MODAL CON SOLUCIÓN PARA TECLADO --- */}
+      {/* ✅ MODAL PARA DATOS DEL PACIENTE */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -122,89 +165,86 @@ export default function ProfileSetupScreen({ navigation }: any) {
         onRequestClose={() => setModalVisible(false)}
       >
         <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-          <KeyboardAvoidingView 
+          <KeyboardAvoidingView
             style={styles.modalOverlay}
-            // En iOS usamos 'padding' para empujar la vista, en Android el sistema operativo suele manejarlo mejor solo con 'height'
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
             <View style={styles.modalContent}>
-              
               <TouchableOpacity style={styles.closeModalButton} onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={26} color="#666" />
               </TouchableOpacity>
 
               <Text style={styles.modalTitle}>Tus datos físicos</Text>
               <Text style={styles.modalSubtitle}>Esta información es vital para tu diagnóstico.</Text>
-              
+
               <View style={{ width: '100%' }}>
-                
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Nombre completo</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Ej: Juan Pérez" 
-                    value={nombre} 
-                    onChangeText={setNombre} 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej: Juan Pérez"
+                    value={nombre}
+                    onChangeText={setNombre}
                   />
                 </View>
-                
+
                 <View style={styles.row}>
                   <View style={[styles.inputGroup, styles.halfInput]}>
                     <Text style={styles.label}>Edad (años)</Text>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Ej: 26" 
-                      keyboardType="numeric" 
-                      value={edad} 
-                      onChangeText={setEdad} 
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej: 26"
+                      keyboardType="numeric"
+                      value={edad}
+                      onChangeText={setEdad}
                     />
                   </View>
 
                   <View style={[styles.inputGroup, styles.halfInput]}>
                     <Text style={styles.label}>Peso (kg)</Text>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Ej: 70.5" 
-                      keyboardType="numeric" 
-                      value={peso} 
-                      onChangeText={setPeso} 
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej: 70.5"
+                      keyboardType="numeric"
+                      value={peso}
+                      onChangeText={setPeso}
                     />
                   </View>
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Altura (metros)</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Ej: 1.75" 
-                    keyboardType="numeric" 
-                    value={altura} 
-                    onChangeText={setAltura} 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej: 1.75"
+                    keyboardType="numeric"
+                    value={altura}
+                    onChangeText={setAltura}
                   />
                 </View>
               </View>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.saveModalButton}
-                onPress={() => {
-                  Keyboard.dismiss(); // Oculta el teclado
-                  setModalVisible(false); // Cierra la ventana
-                }}
+                onPress={handleSaveProfile}
+                disabled={loading}
               >
-                <Text style={styles.saveModalButtonText}>GUARDAR DATOS</Text>
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.saveModalButtonText}>GUARDAR DATOS</Text>
+                )}
               </TouchableOpacity>
-
             </View>
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
       </Modal>
-
     </SafeAreaView>
   );
 }
 
+// ========== ESTILOS (MANTENER LOS QUE TENÍAS) ==========
 const styles = StyleSheet.create({
-  // ... (Mantenemos los estilos anteriores del container, topDecoration, etc.)
   container: { flex: 1, backgroundColor: '#FAFAFA' },
   topDecoration: {
     position: 'absolute', top: -80, right: -80, width: 200, height: 200,
@@ -228,26 +268,22 @@ const styles = StyleSheet.create({
   femaleButton: { backgroundColor: '#C39BD3' },
   selectedButton: { borderColor: '#333', borderWidth: 3 },
   genderText: { fontSize: 18, fontWeight: 'bold', color: '#000', letterSpacing: 1 },
-  
   continueButton: {
     backgroundColor: '#7EBAE4', paddingVertical: 18, paddingHorizontal: 40,
     borderRadius: 30, width: '90%', alignItems: 'center', borderWidth: 2, borderColor: '#000',
   },
   continueButtonText: { fontSize: 16, fontWeight: 'bold', color: '#000', letterSpacing: 1 },
-
-  // --- ESTILOS MEJORADOS PARA EL MODAL Y FORMULARIO ---
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center',
   },
   modalContent: {
     width: '88%', backgroundColor: '#FFF', borderRadius: 20, padding: 25,
     alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 10, 
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 10,
   },
   closeModalButton: { position: 'absolute', top: 15, right: 15, zIndex: 1, padding: 5 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginTop: 10 },
   modalSubtitle: { fontSize: 13, color: '#666', marginBottom: 20, textAlign: 'center' },
-  
   inputGroup: { width: '100%', marginBottom: 12 },
   label: { fontSize: 13, fontWeight: 'bold', color: '#444', marginBottom: 5, marginLeft: 5 },
   input: {
@@ -256,7 +292,6 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   halfInput: { width: '48%' },
-  
   saveModalButton: {
     backgroundColor: '#7EBAE4', paddingVertical: 15, paddingHorizontal: 30,
     borderRadius: 15, marginTop: 15, width: '100%', alignItems: 'center',
