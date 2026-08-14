@@ -64,7 +64,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
     
     console.log("¡Éxito! JSON listo para enviar:", dataParaElBackend);
     Alert.alert("¡Excelente!", "Datos guardados correctamente.");
-    navigation.navigate('Diagnosis');
+    navigation.navigate('HasDiagnosis');
   };
 
   return (

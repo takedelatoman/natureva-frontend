@@ -14,43 +14,58 @@
     import { Ionicons } from '@expo/vector-icons';
 
     export default function DiagnosisScreen({ navigation }: any) {
-    // Aquí guardamos los síntomas que el usuario va tocando (es una lista/Array)
-    const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+    // 1. NUEVO ESTADO: Pregunta principal SÍ/NO
+    const [hasDiagnosis, setHasDiagnosis] = useState<boolean | null>(null);
+
+    // Estados para guardar lo que selecciona
+    const [selectedItems, setSelectedItems] = useState<string[]>([]);
     const [otherDetails, setOtherDetails] = useState<string>('');
 
-    // Lista de síntomas comunes (puedes pedirle a tu backend que te envíe más después)
-    const symptomsList = [
-        'Dolor de cabeza', 'Estrés', 'Insomnio', 'Mala digestión', 
-        'Ansiedad', 'Dolor muscular', 'Fatiga', 'Resfriado',
-        'Alergia', 'Falta de energía'
+    // Listas de datos según lo que responda
+    const diagnosisList = [
+        'Diabetes', 'Hipertensión', 'Artritis', 'Gastritis', 
+        'Asma', 'Migraña Crónica', 'Hipotiroidismo', 'Ansiedad Clínica'
     ];
 
-    // Función mágica que agrega o quita un síntoma si lo tocas
-    const toggleSymptom = (symptom: string) => {
-        if (selectedSymptoms.includes(symptom)) {
-        // Si ya estaba seleccionado, lo quitamos
-        setSelectedSymptoms(selectedSymptoms.filter(s => s !== symptom));
+    const symptomsList = [
+        'Dolor de cabeza', 'Estrés', 'Insomnio', 'Mala digestión', 
+        'Dolor muscular', 'Fatiga', 'Resfriado', 'Falta de energía'
+    ];
+
+    // Función para seleccionar/deseleccionar los chips
+    const toggleItem = (item: string) => {
+        if (selectedItems.includes(item)) {
+        setSelectedItems(selectedItems.filter(i => i !== item));
         } else {
-        // Si no estaba, lo agregamos a la lista
-        setSelectedSymptoms([...selectedSymptoms, symptom]);
+        setSelectedItems([...selectedItems, item]);
+        }
+    };
+
+    // Si cambia de opinión (de SÍ a NO), limpiamos lo que había marcado antes
+    const handleHasDiagnosisSelect = (value: boolean) => {
+        if (hasDiagnosis !== value) {
+        setHasDiagnosis(value);
+        setSelectedItems([]); 
         }
     };
 
     const handleAnalyze = () => {
-        // Armamos el JSON final para mandarle a la IA o al Backend
         const data = {
-        sintomasPrincipales: selectedSymptoms,
+        tieneDiagnostico: hasDiagnosis,
+        // Si dijo que SÍ, mandamos "diagnosticos", si dijo que NO, mandamos "sintomas"
+        [hasDiagnosis ? 'diagnosticos' : 'sintomas']: selectedItems,
         detallesAdicionales: otherDetails
         };
-        console.log("Analizando los siguientes síntomas:", data);
+        console.log("Datos médicos listos para el backend:", data);
         
-        // Aquí viajaríamos a la pantalla de la Receta o Resultados
         // navigation.navigate('RecipeResult'); 
     };
 
+    // Variable para saber qué lista mostrar según la respuesta
+    const currentList = hasDiagnosis ? diagnosisList : symptomsList;
+
     return (
         <SafeAreaView style={styles.container}>
-        {/* Botón de Atrás blindado para cualquier celular */}
         <View style={styles.topBar}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={28} color="#333" />
@@ -61,49 +76,90 @@
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             
             <View style={styles.header}>
-                <Text style={styles.title}>¿Qué te trae por aquí?</Text>
-                <Text style={styles.subtitle}>Selecciona los síntomas o malestares que presentas hoy.</Text>
+                <Text style={styles.title}>Evaluación Médica</Text>
+                <Text style={styles.subtitle}>Ayúdenos a entender mejor su estado actual de salud.</Text>
             </View>
 
-            {/* --- ZONA DE "CHIPS" DE SÍNTOMAS --- */}
-            <View style={styles.chipContainer}>
-                {symptomsList.map((symptom, index) => {
-                const isSelected = selectedSymptoms.includes(symptom);
-                return (
-                    <TouchableOpacity 
-                    key={index} 
-                    style={[styles.chip, isSelected && styles.chipSelected]}
-                    onPress={() => toggleSymptom(symptom)}
-                    >
-                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                        {isSelected ? '✓ ' : ''}{symptom}
+            {/* --- 1. PREGUNTA PRINCIPAL (SÍ/NO) --- */}
+            <View style={styles.questionSection}>
+                <Text style={styles.questionText}>¿Tiene un diagnóstico médico previo?</Text>
+                <View style={styles.yesNoContainer}>
+                <TouchableOpacity 
+                    style={[
+                    styles.choiceButton, 
+                    hasDiagnosis === true && styles.choiceButtonSelected
+                    ]}
+                    onPress={() => handleHasDiagnosisSelect(true)}
+                >
+                    <Text style={[styles.choiceText, hasDiagnosis === true && styles.choiceTextSelected]}>
+                    SÍ, TENGO
                     </Text>
-                    </TouchableOpacity>
-                );
-                })}
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[
+                    styles.choiceButton, 
+                    hasDiagnosis === false && styles.choiceButtonSelected
+                    ]}
+                    onPress={() => handleHasDiagnosisSelect(false)}
+                >
+                    <Text style={[styles.choiceText, hasDiagnosis === false && styles.choiceTextSelected]}>
+                    NO, SOLO SÍNTOMAS
+                    </Text>
+                </TouchableOpacity>
+                </View>
             </View>
 
-            {/* --- ZONA DE TEXTO LIBRE --- */}
-            <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>¿Sientes algo más? (Opcional)</Text>
-                <TextInput 
-                style={styles.textInput}
-                placeholder="Describe con tus propias palabras cómo te sientes..."
-                placeholderTextColor="#999"
-                multiline={true} // Permite escribir varios renglones
-                numberOfLines={4} // La caja nace siendo alta
-                value={otherDetails}
-                onChangeText={setOtherDetails}
-                />
-            </View>
+            {/* --- 2. ZONA DINÁMICA (Solo aparece después de tocar SÍ o NO) --- */}
+            {hasDiagnosis !== null && (
+                <View style={{ width: '100%' }}>
+                <Text style={styles.dynamicTitle}>
+                    {hasDiagnosis ? 'Seleccione sus diagnósticos:' : '¿Qué malestares presenta?'}
+                </Text>
+                
+                <View style={styles.chipContainer}>
+                    {currentList.map((item, index) => {
+                    const isSelected = selectedItems.includes(item);
+                    return (
+                        <TouchableOpacity 
+                        key={index} 
+                        style={[styles.chip, isSelected && styles.chipSelected]}
+                        onPress={() => toggleItem(item)}
+                        >
+                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                            {isSelected ? '✓ ' : ''}{item}
+                        </Text>
+                        </TouchableOpacity>
+                    );
+                    })}
+                </View>
 
-            {/* Espaciador mágico */}
+                <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>
+                    {hasDiagnosis ? '¿Otro diagnóstico? Escríbalo aquí:' : '¿Siente algo más? (Opcional)'}
+                    </Text>
+                    <TextInput 
+                    style={styles.textInput}
+                    placeholder={hasDiagnosis ? "Ej: Ovario poliquístico..." : "Describa otros malestares..."}
+                    placeholderTextColor="#999"
+                    multiline={true} 
+                    numberOfLines={4} 
+                    value={otherDetails}
+                    onChangeText={setOtherDetails}
+                    />
+                </View>
+                </View>
+            )}
+
             <View style={{flex: 1, minHeight: 40}} />
 
+            {/* Botón Final: Solo se activa si respondió SÍ/NO, y si seleccionó algo o escribió algo */}
             <TouchableOpacity 
-                // Se deshabilita si no tocó ningún síntoma Y tampoco escribió nada
-                style={[styles.continueButton, selectedSymptoms.length === 0 && !otherDetails && styles.disabledButton]}
-                disabled={selectedSymptoms.length === 0 && !otherDetails}
+                style={[
+                styles.continueButton, 
+                (hasDiagnosis === null || (selectedItems.length === 0 && !otherDetails)) && styles.disabledButton
+                ]}
+                disabled={hasDiagnosis === null || (selectedItems.length === 0 && !otherDetails)}
                 onPress={handleAnalyze}
             >
                 <Text style={styles.continueButtonText}>ANALIZAR Y TRATAR</Text>
@@ -137,7 +193,7 @@
     scrollContent: {
         flexGrow: 1,
         paddingHorizontal: 20,
-        paddingTop: 120, // Empuja el contenido hacia abajo para que no choque con la flecha
+        paddingTop: 120, 
         paddingBottom: 40,
         alignItems: 'center',
     },
@@ -157,12 +213,66 @@
         color: '#666',
         lineHeight: 24,
     },
-    chipContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap', // Esto hace que si no caben en la línea, pasen a la de abajo automáticamente
+
+    // --- ESTILOS DE LA PREGUNTA SÍ/NO ---
+    questionSection: {
         width: '100%',
         marginBottom: 30,
-        gap: 10, // Espacio entre los chips (necesita React Native moderno, Expo 54 lo tiene)
+        backgroundColor: '#FFF',
+        padding: 20,
+        borderRadius: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 2,
+    },
+    questionText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 15,
+        textAlign: 'center',
+    },
+    yesNoContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    choiceButton: {
+        width: '48%',
+        paddingVertical: 14,
+        borderRadius: 10,
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FAFAFA',
+    },
+    choiceButtonSelected: {
+        borderColor: '#7EBAE4',
+        backgroundColor: '#F0F8FF', // Un azul muy clarito
+    },
+    choiceText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#666',
+    },
+    choiceTextSelected: {
+        color: '#7EBAE4',
+    },
+    // ------------------------------------
+
+    dynamicTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#000',
+        marginBottom: 15,
+    },
+    chipContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap', 
+        width: '100%',
+        marginBottom: 30,
+        gap: 10, 
     },
     chip: {
         backgroundColor: '#FFF',
@@ -207,8 +317,8 @@
         borderWidth: 1,
         borderColor: '#E5E7EB',
         fontSize: 15,
-        minHeight: 120, // Altura inicial grande
-        textAlignVertical: 'top', // Hace que el texto empiece arriba, no en el centro
+        minHeight: 100, 
+        textAlignVertical: 'top', 
     },
     continueButton: {
         backgroundColor: '#7EBAE4',
