@@ -21,8 +21,9 @@ import { pacienteService } from '../services/pacienteService';
 
 export default function ProfileSetupScreen({ navigation }: any) {
   const [selectedGender, setSelectedGender] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false); 
   const [isModalVisible, setModalVisible] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+  
 
   const [nombre, setNombre] = useState<string>('');
   const [edad, setEdad] = useState<string>('');
@@ -98,7 +99,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
       return;
     }
 
-<<<<<<< HEAD
+
     // 3. Si todo está correcto, armamos el JSON
     const dataParaElBackend = {
       nombre: nombre,
@@ -111,9 +112,8 @@ export default function ProfileSetupScreen({ navigation }: any) {
     console.log("¡Éxito! JSON listo para enviar:", dataParaElBackend);
     Alert.alert("¡Excelente!", "Datos guardados correctamente.");
     navigation.navigate('HasDiagnosis');
-=======
+
     navigation.navigate('Diagnosis');
->>>>>>> dfcbd1c (realizado las conexiones del login , registro de datos de Paciente ,Profile)
   };
 
   return (
