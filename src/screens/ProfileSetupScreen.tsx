@@ -1,4 +1,4 @@
-// ProfileSetupScreen.tsx
+// ProfileSetupScreen.tsx - COMPLETO Y CORREGIDO
 import React, { useState } from 'react';
 import { 
   View, 
@@ -23,7 +23,6 @@ export default function ProfileSetupScreen({ navigation }: any) {
   const [selectedGender, setSelectedGender] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false); 
   const [isModalVisible, setModalVisible] = useState<boolean>(false);
-  
 
   const [nombre, setNombre] = useState<string>('');
   const [edad, setEdad] = useState<string>('');
@@ -68,7 +67,8 @@ export default function ProfileSetupScreen({ navigation }: any) {
         Alert.alert('¡Excelente!', 'Datos guardados correctamente');
         Keyboard.dismiss();
         setModalVisible(false);
-        navigation.navigate('Diagnosis');
+        // ✅ Navegar a HasDiagnosis (la pantalla que existe)
+        navigation.navigate('HasDiagnosis');
       } else {
         Alert.alert('Error', response.message || 'Error al guardar datos');
       }
@@ -80,7 +80,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
     }
   };
 
-  // ✅ Continuar (validar antes de ir a Diagnosis)
+  // ✅ Continuar (validar antes de ir a HasDiagnosis)
   const handleContinue = () => {
     if (!selectedGender) {
       Alert.alert(
@@ -99,8 +99,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
       return;
     }
 
-
-    // 3. Si todo está correcto, armamos el JSON
+    // Si todo está correcto, armamos el JSON
     const dataParaElBackend = {
       nombre: nombre,
       edad: parseInt(edad),
@@ -110,10 +109,9 @@ export default function ProfileSetupScreen({ navigation }: any) {
     };
     
     console.log("¡Éxito! JSON listo para enviar:", dataParaElBackend);
-    Alert.alert("¡Excelente!", "Datos guardados correctamente.");
+    
+    // ✅ Navegar a HasDiagnosis (SOLO UNA VEZ)
     navigation.navigate('HasDiagnosis');
-
-    navigation.navigate('Diagnosis');
   };
 
   return (
@@ -243,7 +241,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
   );
 }
 
-// ========== ESTILOS (MANTENER LOS QUE TENÍAS) ==========
+// ========== ESTILOS ==========
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
   topDecoration: {
