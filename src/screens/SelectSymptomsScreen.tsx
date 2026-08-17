@@ -26,18 +26,19 @@ export default function SelectSymptomsScreen({ route, navigation }: any) {
   const [otherSymptom, setOtherSymptom] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
-  const symptomsList = [
-    'Cansancio Extremo', 'Dolor Articular',
-    'Dolor de Espalda', 'Mareos / Vértigo',
-    'Dolor de Cabeza', 'Visión Borrosa',
-    'Acidez Estomacal', 'Estreñimiento',
-    'Palpitaciones', 'Calambres',
-    'Zumbido en Oídos', 'Falta de Aire',
-    'Boca Seca', 'Hinchazón de Pies',
-    'Insomnio', 'Sofocos / Calores',
-    'Náuseas', 'Dificultad al Orinar',
-    'Pérdida de Memoria', 'Temblores'
-  ];
+    // Lista de unos 20 síntomas comunes y claros para adultos
+    const symptomsList = [
+        'Cansancio Extremo', 'Dolor Articular', 
+        'Dolor de Espalda', 'Mareos / Vértigo',
+        'Dolor de Cabeza', 'Visión Borrosa',
+        'Acidez Estomacal', 'Estreñimiento',
+        'Palpitaciones', 'Calambres',
+        'Zumbido en Oídos', 'Falta de Aire',
+        'Boca Seca', 'Hinchazón de Pies',
+        'Insomnio', 'Sofocos / Calores',
+        'Náuseas', 'Dificultad al Orinar',
+        'Pérdida de Memoria', 'Temblores'
+    ];
 
   const toggleSymptom = (symptom: string) => {
     if (selectedSymptoms.includes(symptom)) {
