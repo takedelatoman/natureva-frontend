@@ -22,7 +22,7 @@
 
     // Lista de unos 20 síntomas comunes y claros para adultos
     const symptomsList = [
-        'Cansancio Extremo', 'Dolor Articular', 
+        'Cansancio', 'Dolor Articular', 
         'Dolor de Espalda', 'Mareos / Vértigo',
         'Dolor de Cabeza', 'Visión Borrosa',
         'Acidez Estomacal', 'Estreñimiento',
