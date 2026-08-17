@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 const getBaseUrl = () => {
   // 🔥 Para el emulador Android, usa la IP de tu PC
   if (Platform.OS === 'android') {
-    return 'http://192.168.1.23:3000/api';
+    return 'http://192.168.1.28:3000/api';
   }
   return 'http://localhost:3000/api';
 };
