@@ -3,14 +3,12 @@ import { API_URL } from '../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const archivoService = {
-  // ✅ Subir múltiples archivos
   subirMultiplesArchivos: async (files, datos = {}) => {
     try {
       const token = await AsyncStorage.getItem('token');
       
       const formData = new FormData();
       
-      // Agregar archivos
       files.forEach((file, index) => {
         formData.append('archivos', {
           uri: file.uri,
@@ -19,7 +17,6 @@ export const archivoService = {
         });
       });
       
-      // Agregar campos adicionales
       Object.keys(datos).forEach(key => {
         if (datos[key] !== null && datos[key] !== undefined) {
           formData.append(key, String(datos[key]));
@@ -40,5 +37,4 @@ export const archivoService = {
       throw error;
     }
   },
-  // ... otros métodos
 };

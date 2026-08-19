@@ -86,6 +86,7 @@
         transform: [{ scale: 1.5 }], // Lo hacemos un 50% más grande para que se note bien
         marginBottom: 40,
     },
+    
     title: {
         fontSize: 22,
         fontWeight: '900',

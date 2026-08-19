@@ -3,39 +3,24 @@ import { API_URL } from '../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const laboratorioService = {
-  // ✅ Guardar laboratorio
-  guardarLaboratorio: async (data, archivos = []) => {
+  // ✅ GUARDAR LABORATORIO (JSON)
+  guardarLaboratorio: async (data) => {
     try {
       const token = await AsyncStorage.getItem('token');
       
-      const formData = new FormData();
+      console.log('📤 Enviando laboratorio:', data);
       
-      // Agregar campos al FormData
-      Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== undefined) {
-          formData.append(key, typeof data[key] === 'object' ? JSON.stringify(data[key]) : String(data[key]));
-        }
-      });
-
-      // Agregar archivos
-      archivos.forEach((file, index) => {
-        formData.append('archivos', {
-          uri: file.uri,
-          type: file.type || 'image/jpeg',
-          name: file.name || `archivo_${index}.jpg`,
-        });
-      });
-
       const response = await fetch(`${API_URL}/laboratorios`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json', // 👈 JSON, NO FormData
           'Authorization': `Bearer ${token}`,
         },
-        body: formData,
+        body: JSON.stringify(data),
       });
       
       const result = await response.json();
-      console.log('📥 Respuesta del servidor (laboratorio):', result);
+      console.log('📥 Respuesta laboratorio:', result);
       return result;
     } catch (error) {
       console.error('❌ Error en guardarLaboratorio:', error);
@@ -43,63 +28,38 @@ export const laboratorioService = {
     }
   },
 
-  // ✅ Obtener laboratorios del paciente
-  obtenerLaboratorios: async () => {
+  // ✅ SUBIR ARCHIVOS (FormData)
+  subirArchivos: async (files, datos) => {
     try {
       const token = await AsyncStorage.getItem('token');
       
-      const response = await fetch(`${API_URL}/laboratorios`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+      const formData = new FormData();
+      
+      files.forEach((file, index) => {
+        formData.append('archivos', {
+          uri: file.uri,
+          type: file.type || 'image/jpeg',
+          name: file.name || `archivo_${index}.jpg`,
+        });
       });
       
-      return await response.json();
-    } catch (error) {
-      console.error('❌ Error en obtenerLaboratorios:', error);
-      throw error;
-    }
-  },
+      Object.keys(datos).forEach(key => {
+        if (datos[key] !== null && datos[key] !== undefined) {
+          formData.append(key, String(datos[key]));
+        }
+      });
 
-  // ✅ Obtener laboratorio por ID
-  obtenerLaboratorioPorId: async (id) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      
-      const response = await fetch(`${API_URL}/laboratorios/${id}`, {
-        method: 'GET',
+      const response = await fetch(`${API_URL}/archivos/multiple`, {
+        method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        body: formData,
       });
       
       return await response.json();
     } catch (error) {
-      console.error('❌ Error en obtenerLaboratorioPorId:', error);
-      throw error;
-    }
-  },
-
-  // ✅ Actualizar laboratorio
-  actualizarLaboratorio: async (id, data) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      
-      const response = await fetch(`${API_URL}/laboratorios/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      console.error('❌ Error en actualizarLaboratorio:', error);
+      console.error('❌ Error en subirArchivos:', error);
       throw error;
     }
   },

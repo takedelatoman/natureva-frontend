@@ -1,5 +1,5 @@
-// HasLabsScreen.tsx - COMPLETO CON ESTILOS
-import React from 'react';
+// HasLabsScreen.tsx - COMPLETO Y CORREGIDO
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,17 +10,42 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HasLabsScreen({ route, navigation }: any) {
-  // Traemos TODO el historial del usuario (Diagnósticos y Síntomas)
+  const [pacienteId, setPacienteId] = useState<string | null>(null);
   const datosPrevios = route.params?.datosPrevios || {};
-  const pacienteId = route.params?.pacienteId || null;
+
+  useEffect(() => {
+    const loadPacienteId = async () => {
+      // 1. Intentar de params
+      let id = route.params?.pacienteId || null;
+      
+      // 2. Si no, de AsyncStorage
+      if (!id) {
+        id = await AsyncStorage.getItem('pacienteId');
+      }
+      
+      // 3. Si aún no, del usuario guardado
+      if (!id) {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          id = user.pacienteId || null;
+        }
+      }
+      
+      setPacienteId(id);
+      console.log('✅ [HasLabs] pacienteId final:', id);
+    };
+    loadPacienteId();
+  }, []);
 
   console.log('🔍 [HasLabs] pacienteId:', pacienteId);
   console.log('🔍 [HasLabs] datosPrevios:', datosPrevios);
 
   const handleYes = () => {
-    // Si toca SI, lo llevamos a la Página 9 (LabValues)
+    console.log('📤 [HasLabs] Enviando a LabValues - pacienteId:', pacienteId);
     navigation.navigate('LabValues', {
       pacienteId: pacienteId,
       datosPrevios: datosPrevios,
@@ -28,7 +53,6 @@ export default function HasLabsScreen({ route, navigation }: any) {
   };
 
   const handleNo = () => {
-    // Si toca NO, nos saltamos los laboratorios y vamos a Analyzing
     const datosCompletos = {
       ...datosPrevios,
       pacienteId: pacienteId,
@@ -57,7 +81,6 @@ export default function HasLabsScreen({ route, navigation }: any) {
           TIENES VALORES{'\n'}DE LABORATORIO{'\n'}?
         </Text>
 
-        {/* Botones Cuadrados Gigantes */}
         <View style={styles.buttonsContainer}>
           <TouchableOpacity
             style={styles.squareButton}
@@ -80,9 +103,6 @@ export default function HasLabsScreen({ route, navigation }: any) {
   );
 }
 
-// ==========================================
-// ESTILOS COMPLETOS
-// ==========================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
