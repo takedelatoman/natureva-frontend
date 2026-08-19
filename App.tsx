@@ -13,6 +13,8 @@ import HasSymptomsScreen from './src/screens/HasSymptomsScreen'; // <-- IMPORTAM
 import SelectSymptomsScreen from './src/screens/SelectSymptomsScreen'; // pag 7
 import HasLabsScreen from './src/screens/HasLabsScreen'; // <-- importamos pagina 8
 import LabValuesScreen from './src/screens/LabValuesScreen'; //pag 9
+import HabitsScreen from './src/screens/HabitsScreen';
+import MentalRiskScreen from './src/screens/MentalRiskScreen';
 import AnalyzingScreen from './src/screens/AnalyzingScreen'; //pag10
 import RecipeResultScreen from './src/screens/RecipeResultScreen'; //pag11
 
@@ -38,6 +40,8 @@ export default function App() {
         <Stack.Screen name="SelectSymptoms" component={SelectSymptomsScreen} />
         <Stack.Screen name="HasLabs" component={HasLabsScreen} />
         <Stack.Screen name="LabValues" component={LabValuesScreen} />
+        <Stack.Screen name="Habits" component={HabitsScreen} />
+        <Stack.Screen name="MentalRisk" component={MentalRiskScreen} />
         <Stack.Screen name="Analyzing" component={AnalyzingScreen} />
         <Stack.Screen name="RecipeResult" component={RecipeResultScreen} />
       </Stack.Navigator>
