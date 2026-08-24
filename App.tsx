@@ -26,6 +26,7 @@ const DummyScreen = () => <View style={{flex: 1, backgroundColor: '#FAFAFA'}} />
 
 const Stack = createNativeStackNavigator();
 
+
 export default function App() {
   return (
     <NavigationContainer>
