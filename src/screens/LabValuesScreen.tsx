@@ -1,5 +1,5 @@
-// LabValuesScreen.tsx - COMPLETO Y FUNCIONAL
-import React, { useState, useEffect, useRef } from 'react';
+// screens/LabValuesScreen.tsx - VERSIÓN DEFINITIVA COMPLETA
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,85 +9,99 @@ import {
   Platform,
   StatusBar,
   FlatList,
-  TextInput,
   Alert,
+  Image,
   ActivityIndicator,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { laboratorioService } from '../services/laboratorioService';
 import { archivoService } from '../services/archivoService';
 
+const { width } = Dimensions.get('window');
+
 // ==========================================
-// COMPONENTE: RUEDA (WHEEL PICKER) - CORREGIDO
+// COMPONENTE LA RUEDA (WheelPicker) - CON ScrollView INTERNO
 // ==========================================
-const WheelPicker = ({ label, unit, min, max, initialValue, onValueChange }: any) => {
+const WheelPicker = ({ 
+  label, 
+  unit, 
+  min, 
+  max, 
+  step = 1, 
+  initialValue, 
+  onValueChange,
+  disabled = false 
+}: any) => {
   const ITEM_HEIGHT = 60;
-  const numbers = ['', ...Array.from({ length: max - min + 1 }, (_, i) => min + i), ''];
-  const flatListRef = useRef<FlatList>(null);
-  const [currentValue, setCurrentValue] = useState(initialValue || min);
+  const length = Math.round((max - min) / step) + 1;
+  const rawNumbers = Array.from({ length }, (_, i) => {
+    const val = min + (i * step);
+    return Number(val.toFixed(1));
+  });
 
-  // ✅ Inicializar en el valor correcto
-  useEffect(() => {
-    if (flatListRef.current && initialValue) {
-      const index = initialValue - min + 1;
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index: index,
-          animated: false,
-        });
-      }, 100);
-    }
-  }, []);
+  const numbers = ['', ...rawNumbers, ''];
+  const scrollViewRef = useRef<ScrollView>(null);
 
+  let initIndex = rawNumbers.findIndex(n => n === initialValue);
+  if (initIndex === -1) initIndex = 0;
+
+  // Actualizar valor cuando cambia el índice
   const handleScroll = (event: any) => {
+    if (disabled) return;
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / ITEM_HEIGHT);
-    const selectedNumber = numbers[index];
+    const selectedNumber = numbers[index + 1];
     if (selectedNumber !== '' && selectedNumber !== undefined) {
-      const num = parseInt(selectedNumber);
-      if (!isNaN(num)) {
-        setCurrentValue(num);
-        onValueChange(num);
-      }
+      onValueChange(selectedNumber);
     }
   };
+
+  // Scroll al valor inicial
+  useEffect(() => {
+    if (scrollViewRef.current && initIndex > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: initIndex * ITEM_HEIGHT,
+          animated: true,
+        });
+      }, 200);
+    }
+  }, []);
 
   return (
     <View style={pickerStyles.container}>
       <Text style={pickerStyles.label}>
         {label} <Text style={pickerStyles.unit}>({unit})</Text>
       </Text>
-      
       <View style={pickerStyles.wheelContainer}>
         <View style={pickerStyles.selectionBox} pointerEvents="none" />
-        <FlatList
-          ref={flatListRef}
-          data={numbers}
-          keyExtractor={(item, index) => index.toString()}
+        <ScrollView
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           snapToInterval={ITEM_HEIGHT}
           decelerationRate="fast"
           onMomentumScrollEnd={handleScroll}
-          getItemLayout={(data, index) => ({
-            length: ITEM_HEIGHT,
-            offset: ITEM_HEIGHT * index,
-            index,
-          })}
-          renderItem={({ item }) => (
-            <View style={[pickerStyles.item, { height: ITEM_HEIGHT }]}>
+          scrollEnabled={!disabled}
+          contentContainerStyle={pickerStyles.scrollContent}
+          bounces={false}
+          nestedScrollEnabled={true}
+        >
+          {numbers.map((item, index) => (
+            <View key={index} style={[pickerStyles.item, { height: ITEM_HEIGHT }]}>
               <Text style={[
-                pickerStyles.itemText,
-                item === '' ? { color: 'transparent' } : { color: '#333' }
+                pickerStyles.itemText, 
+                item === '' ? pickerStyles.itemTextEmpty : null,
+                disabled && pickerStyles.itemTextDisabled
               ]}>
                 {item}
               </Text>
             </View>
-          )}
-          scrollEnabled={true}
-          style={{ height: ITEM_HEIGHT * 3 }}
-        />
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
@@ -101,319 +115,419 @@ export default function LabValuesScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState<boolean>(false);
   const [uploadingFiles, setUploadingFiles] = useState<boolean>(false);
   const [labData, setLabData] = useState<any>({});
-  const [generalLab, setGeneralLab] = useState<string>('');
-  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const datosPrevios = route.params?.datosPrevios || {};
   const diagnosticos = datosPrevios.diagnosticos || [];
 
-  // ✅ Cargar pacienteId
+  // Efecto para cargar pacienteId
   useEffect(() => {
     const loadPacienteId = async () => {
-      let id = route.params?.pacienteId || null;
-      if (!id) {
-        id = await AsyncStorage.getItem('pacienteId');
-      }
-      if (!id) {
-        const userStr = await AsyncStorage.getItem('user');
-        if (userStr) {
-          const user = JSON.parse(userStr);
-          id = user.pacienteId || null;
+      try {
+        let id = route.params?.pacienteId || null;
+        
+        if (!id) {
+          id = await AsyncStorage.getItem('pacienteId');
         }
+        
+        if (!id) {
+          const userStr = await AsyncStorage.getItem('user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            id = user.pacienteId || null;
+          }
+        }
+        
+        setPacienteId(id);
+        console.log('✅ [LabValues] pacienteId final:', id);
+      } catch (error) {
+        console.error('❌ Error cargando pacienteId:', error);
       }
-      setPacienteId(id);
-      console.log('✅ [LabValues] pacienteId final:', id);
     };
+    
     loadPacienteId();
   }, []);
 
-  const showDiabetes = diagnosticos.includes('Diabetes');
-  const showHipertension = diagnosticos.includes('Presión Alta');
-  const showColesterol = diagnosticos.includes('Colesterol Alto');
+  // Verificar diagnósticos
+  const showDiabetes = diagnosticos.some((d: string) => 
+    d.toLowerCase().includes('diabetes')
+  );
+  const showHipertension = diagnosticos.some((d: string) => 
+    d.toLowerCase().includes('presión') || 
+    d.toLowerCase().includes('hipertensión')
+  );
+  const showColesterol = diagnosticos.some((d: string) => 
+    d.toLowerCase().includes('colesterol') || 
+    d.toLowerCase().includes('lípido')
+  );
+  const hasSpecificLabs = showDiabetes || showHipertension || showColesterol;
 
-  // ✅ Seleccionar archivo
-  const pickFile = async () => {
+  // LÓGICA DE LA CÁMARA Y GALERÍA
+  const handleImageOption = useCallback(() => {
+    Alert.alert(
+      "Adjuntar Laboratorio",
+      "¿De dónde desea obtener la imagen?",
+      [
+        { text: "📷 Tomar Foto", onPress: takePhoto },
+        { text: "🖼️ Elegir de Galería", onPress: pickImage },
+        { text: "❌ Cancelar", style: "cancel" }
+      ]
+    );
+  }, []);
+
+  const takePhoto = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
-        copyToCacheDirectory: true,
-        multiple: true,
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Permiso necesario", "Necesitamos acceso a la cámara.");
+        return;
+      }
+      
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+        aspect: [4, 3],
       });
-
-      if (result.canceled) return;
-
-      const files = result.assets.map((asset: any) => ({
-        uri: asset.uri,
-        name: asset.name || 'archivo',
-        type: asset.mimeType || 'application/octet-stream',
-      }));
-
-      setSelectedFiles([...selectedFiles, ...files]);
+      
+      if (!result.canceled && result.assets[0]) {
+        setImageUri(result.assets[0].uri);
+        console.log('📸 Foto tomada:', result.assets[0].uri);
+      }
     } catch (error) {
-      console.error('Error al seleccionar archivo:', error);
-      Alert.alert('Error', 'No se pudo seleccionar el archivo');
+      console.error('❌ Error al tomar foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
 
-  // ✅ Eliminar archivo
-  const removeFile = (index: number) => {
-    const newFiles = [...selectedFiles];
-    newFiles.splice(index, 1);
-    setSelectedFiles(newFiles);
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Permiso necesario", "Necesitamos acceso a la galería.");
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        quality: 0.8,
+        aspect: [4, 3],
+      });
+      
+      if (!result.canceled && result.assets[0]) {
+        setImageUri(result.assets[0].uri);
+        console.log('🖼️ Imagen seleccionada:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('❌ Error al seleccionar imagen:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
   };
 
-  // ✅ GUARDAR Y CONTINUAR
+  const removeImage = useCallback(() => {
+    Alert.alert(
+      "Eliminar imagen",
+      "¿Deseas eliminar la imagen adjunta?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Eliminar", onPress: () => setImageUri(null), style: "destructive" }
+      ]
+    );
+  }, []);
+
+  // ✅ GUARDAR LABORATORIO Y NAVEGAR A HABITS
   const handleContinue = async () => {
+    if (!imageUri && Object.keys(labData).length === 0) {
+      Alert.alert(
+        'Sin datos de laboratorio',
+        'No has adjuntado imagen ni ingresado valores. ¿Deseas continuar?',
+        [
+          { text: 'Volver', style: 'cancel' },
+          { text: 'Continuar', onPress: () => navegarASiguiente() }
+        ]
+      );
+      return;
+    }
+    navegarASiguiente();
+  };
+
+  const navegarASiguiente = async () => {
     const id = pacienteId || await AsyncStorage.getItem('pacienteId');
-    
+
     if (!id) {
-      Alert.alert('Error', 'No se encontró el ID del paciente. Inicia sesión nuevamente.');
+      Alert.alert('Error', 'No se encontró el ID del paciente.');
       return;
     }
 
-    console.log('✅ [LabValues] Usando pacienteId:', id);
-
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setLoading(true);
+
     try {
       let laboratorioId = null;
-
-      // 1. Crear laboratorio
-      const labDataToSend = {
-        paciente_id: id,
-        tipo_examen: 'SANGRE',
-        observacion: generalLab.trim() || 'Análisis de laboratorio',
-        resultados: labData,
-        estado: 'COMPLETADO',
-      };
-
-      console.log('📤 Creando laboratorio...', labDataToSend);
-      
-      const labResponse = await laboratorioService.guardarLaboratorio(labDataToSend);
-      
-      if (labResponse.success && labResponse.data) {
-        laboratorioId = labResponse.data.id;
-        console.log('✅ Laboratorio creado:', laboratorioId);
-      } else {
-        Alert.alert('Error', labResponse.message || 'Error al guardar laboratorio');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Subir archivos
       let archivosSubidos = [];
-      if (selectedFiles.length > 0 && laboratorioId) {
-        setUploadingFiles(true);
-        console.log('📤 Subiendo archivos...');
-        
-        const archivoResponse = await archivoService.subirMultiplesArchivos(selectedFiles, {
+
+      if (Object.keys(labData).length > 0 || imageUri) {
+        const labDataToSend = {
           paciente_id: id,
-          laboratorio_id: laboratorioId,
-          categoria: 'LABORATORIO',
-        });
-        
-        if (archivoResponse.success) {
-          archivosSubidos = archivoResponse.data || [];
-          console.log('✅ Archivos subidos:', archivosSubidos.length);
+          tipo_examen: 'SANGRE',
+          observacion: 'Análisis de laboratorio',
+          resultados: labData,
+          estado: 'COMPLETADO',
+        };
+
+        console.log('📤 Creando laboratorio...', labDataToSend);
+
+        const labResponse = await laboratorioService.guardarLaboratorio(labDataToSend);
+
+        if (labResponse.success && labResponse.data) {
+          laboratorioId = labResponse.data.id;
+          console.log('✅ Laboratorio creado:', laboratorioId);
+        } else {
+          throw new Error(labResponse.message || 'Error al guardar laboratorio');
         }
-        setUploadingFiles(false);
+
+        if (imageUri && laboratorioId) {
+          setUploadingFiles(true);
+          console.log('📤 Subiendo imagen...');
+
+          try {
+            const archivoResponse = await archivoService.subirMultiplesArchivos(
+              [{
+                uri: imageUri,
+                name: `laboratorio_${Date.now()}.jpg`,
+                type: 'image/jpeg',
+              }],
+              {
+                paciente_id: id,
+                laboratorio_id: laboratorioId,
+                categoria: 'LABORATORIO',
+              }
+            );
+
+            if (archivoResponse.success) {
+              archivosSubidos = archivoResponse.data || [];
+              console.log('✅ Imagen subida:', archivosSubidos.length);
+            }
+          } catch (uploadError) {
+            console.error('⚠️ Error al subir imagen:', uploadError);
+          }
+          setUploadingFiles(false);
+        }
       }
 
-      // 3. Navegar a Analyzing
       const todosLosDatos = {
         ...datosPrevios,
         pacienteId: id,
         laboratorios: labData,
         laboratorioId: laboratorioId,
-        laboratorioGeneral: generalLab.trim(),
-        archivos: selectedFiles.map((f) => f.name),
+        tieneLaboratorios: !!laboratorioId || !!imageUri || Object.keys(labData).length > 0,
+        archivos: imageUri ? [imageUri] : [],
         archivosSubidos: archivosSubidos,
       };
-      
-      console.log('✅ Datos completos enviados a Análisis:', todosLosDatos);
-      navigation.navigate('Analyzing', { datosPrevios: todosLosDatos });
-      
-    } catch (error) {
+
+      console.log('✅ Navegando a Habits con datos:', {
+        pacienteId: id,
+        laboratorioId,
+        tieneLaboratorios: todosLosDatos.tieneLaboratorios,
+        archivosSubidos: archivosSubidos.length
+      });
+
+      navigation.navigate('Habits', { datosPrevios: todosLosDatos });
+
+    } catch (error: any) {
       console.error('❌ Error:', error);
-      Alert.alert('Error', 'Ocurrió un error al guardar los datos');
+      Alert.alert('Error', error.message || 'Ocurrió un error al guardar los datos.');
     } finally {
       setLoading(false);
       setUploadingFiles(false);
+      setIsSubmitting(false);
     }
   };
 
-  // ✅ Data para FlatList
-  const sections = [];
-  sections.push({ type: 'title', key: 'title' });
-  sections.push({ type: 'upload', key: 'upload' });
-  sections.push({ type: 'divider', key: 'divider' });
+  // Limpiar imagen al salir
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      setImageUri(null);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
-  if (showDiabetes) {
-    sections.push({ type: 'glucosa', key: 'glucosa' });
-    sections.push({ type: 'hemoglobina', key: 'hemoglobina' });
-  }
-  if (showHipertension) {
-    sections.push({ type: 'sistolica', key: 'sistolica' });
-    sections.push({ type: 'diastolica', key: 'diastolica' });
-  }
-  if (showColesterol) {
-    sections.push({ type: 'colesterol', key: 'colesterol' });
-  }
+  // ✅ Contenido principal como Header del FlatList
+  const renderHeader = () => (
+    <View style={styles.contentContainer}>
+      <Text style={styles.title}>VALORES DE{'\n'}LABORATORIO</Text>
+      <Text style={styles.subtitle}>
+        Adjunta una foto de tus análisis o ingresa los valores manualmente
+      </Text>
 
-  if (!showDiabetes && !showHipertension && !showColesterol) {
-    sections.push({ type: 'general', key: 'general' });
-  }
-
-  sections.push({ type: 'button', key: 'button' });
-
-  const renderSection = ({ item }: { item: any }) => {
-    switch (item.type) {
-      case 'title':
-        return <Text style={styles.title}>VALORES DE{'\n'}LABORATORIO</Text>;
-      
-      case 'upload':
-        return (
-          <View>
-            <TouchableOpacity style={styles.uploadBox} onPress={pickFile} activeOpacity={0.7}>
-              <Ionicons name="camera-outline" size={40} color="#7EBAE4" />
-              <Text style={styles.uploadTitle}>ADJUNTAR FOTO O PDF</Text>
-              <Text style={styles.uploadSubtitle}>(Toque para subir imágenes o PDFs)</Text>
+      {imageUri ? (
+        <View style={styles.imagePreviewContainer}>
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+          <View style={styles.imageActions}>
+            <TouchableOpacity style={styles.imageActionButton} onPress={handleImageOption}>
+              <Ionicons name="refresh-circle-outline" size={22} color="#FFF" />
+              <Text style={styles.imageActionText}>Cambiar</Text>
             </TouchableOpacity>
-            
-            {selectedFiles.length > 0 && (
-              <View style={styles.fileListContainer}>
-                <Text style={styles.fileListTitle}>📎 Archivos seleccionados:</Text>
-                {selectedFiles.map((file, index) => (
-                  <View key={index} style={styles.fileItem}>
-                    <Text style={styles.fileName}>{file.name}</Text>
-                    <TouchableOpacity onPress={() => removeFile(index)}>
-                      <Ionicons name="close-circle" size={24} color="#FF6B6B" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
+            <TouchableOpacity style={[styles.imageActionButton, styles.imageActionDelete]} onPress={removeImage}>
+              <Ionicons name="trash-outline" size={22} color="#FFF" />
+              <Text style={styles.imageActionText}>Eliminar</Text>
+            </TouchableOpacity>
           </View>
-        );
-      
-      case 'divider':
-        return (
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <Text style={styles.dividerText}>O INGRESO MANUAL</Text>
-            <View style={styles.line} />
-          </View>
-        );
-      
-      case 'glucosa':
-        return (
+        </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.uploadBox} 
+          activeOpacity={0.7} 
+          onPress={handleImageOption} 
+          disabled={loading}
+        >
+          <Ionicons name="camera-outline" size={50} color="#7EBAE4" />
+          <Text style={styles.uploadTitle}>ADJUNTAR FOTO</Text>
+          <Text style={styles.uploadSubtitle}>
+            Toca para escanear o seleccionar tus análisis
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {hasSpecificLabs && (
+        <View style={styles.divider}>
+          <View style={styles.line} />
+          <Text style={styles.dividerText}>O INGRESO MANUAL</Text>
+          <View style={styles.line} />
+        </View>
+      )}
+    </View>
+  );
+
+  // ✅ Footer del FlatList (botones y progreso)
+  const renderFooter = () => (
+    <View style={styles.footerContainer}>
+      {showDiabetes && (
+        <>
           <WheelPicker
             label="1. Nivel de Glucosa"
             unit="mg/dL"
             min={60}
             max={300}
+            step={1}
             initialValue={110}
+            disabled={loading}
             onValueChange={(val: number) => setLabData({ ...labData, glucosa: val })}
           />
-        );
-      
-      case 'hemoglobina':
-        return (
           <WheelPicker
             label="2. Hemoglobina Glicosilada"
             unit="%"
             min={4}
             max={15}
-            initialValue={6}
+            step={0.1}
+            initialValue={6.5}
+            disabled={loading}
             onValueChange={(val: number) => setLabData({ ...labData, hemoglobina: val })}
           />
-        );
-      
-      case 'sistolica':
-        return (
+        </>
+      )}
+
+      {showHipertension && (
+        <>
           <WheelPicker
             label="Presión Sistólica"
             unit="mmHg"
             min={90}
             max={200}
+            step={1}
             initialValue={120}
+            disabled={loading}
             onValueChange={(val: number) => setLabData({ ...labData, sistolica: val })}
           />
-        );
-      
-      case 'diastolica':
-        return (
           <WheelPicker
             label="Presión Diastólica"
             unit="mmHg"
             min={60}
             max={130}
+            step={1}
             initialValue={80}
+            disabled={loading}
             onValueChange={(val: number) => setLabData({ ...labData, diastolica: val })}
           />
-        );
-      
-      case 'colesterol':
-        return (
-          <WheelPicker
-            label="Colesterol Total"
-            unit="mg/dL"
-            min={100}
-            max={400}
-            initialValue={200}
-            onValueChange={(val: number) => setLabData({ ...labData, colesterol: val })}
-          />
-        );
-      
-      case 'general':
-        return (
-          <View style={styles.genericInputContainer}>
-            <Text style={styles.genericInputLabel}>Escriba sus valores más relevantes:</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ej: Ácido úrico 8.2..."
-              placeholderTextColor="#999"
-              multiline={true}
-              numberOfLines={4}
-              value={generalLab}
-              onChangeText={setGeneralLab}
-            />
+        </>
+      )}
+
+      {showColesterol && (
+        <WheelPicker
+          label="Colesterol Total"
+          unit="mg/dL"
+          min={100}
+          max={400}
+          step={1}
+          initialValue={200}
+          disabled={loading}
+          onValueChange={(val: number) => setLabData({ ...labData, colesterol: val })}
+        />
+      )}
+
+      <View style={{ height: 20 }} />
+
+      <TouchableOpacity
+        style={[
+          styles.continueButton, 
+          (loading || uploadingFiles) && styles.disabledButton
+        ]}
+        onPress={handleContinue}
+        disabled={loading || uploadingFiles}
+      >
+        {loading || uploadingFiles ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color="#FFF" size="small" />
+            <Text style={styles.loadingText}>
+              {uploadingFiles ? 'Subiendo imagen...' : 'Guardando...'}
+            </Text>
           </View>
-        );
-      
-      case 'button':
-        return (
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={handleContinue}
-            disabled={loading || uploadingFiles}
-          >
-            {loading || uploadingFiles ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.continueButtonText}>VER MI RECOMENDACIÓN</Text>
-            )}
-          </TouchableOpacity>
-        );
-      
-      default:
-        return null;
-    }
-  };
+        ) : (
+          <Text style={styles.continueButtonText}>
+            {imageUri || Object.keys(labData).length > 0 
+              ? 'CONTINUAR A HÁBITOS' 
+              : 'SALTAR'}
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.progressContainer}>
+        <View style={styles.progressDot} />
+        <View style={styles.progressLine} />
+        <View style={styles.progressDot} />
+        <View style={styles.progressLine} />
+        <View style={styles.progressDot} />
+        <View style={styles.progressLine} />
+        <View style={[styles.progressDot, styles.progressDotActive]} />
+        <Text style={styles.progressText}>Laboratorio</Text>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+          disabled={loading || uploadingFiles}
+        >
           <Ionicons name="arrow-back" size={32} color="#333" />
         </TouchableOpacity>
       </View>
 
+      {/* ✅ FlatList PRINCIPAL con renderItem agregado */}
       <FlatList
-        data={sections}
-        keyExtractor={(item) => item.key}
-        renderItem={renderSection}
-        contentContainerStyle={styles.scrollContent}
+        data={[]}
+        keyExtractor={() => 'main'}
+        renderItem={null} // ✅ Obligatorio, pero no se usa porque data está vacío
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        contentContainerStyle={styles.flatListContent}
         showsVerticalScrollIndicator={false}
+        bounces={true}
+        scrollEventThrottle={16}
       />
     </SafeAreaView>
   );
@@ -423,206 +537,262 @@ export default function LabValuesScreen({ route, navigation }: any) {
 // ESTILOS
 // ==========================================
 const pickerStyles = StyleSheet.create({
-  container: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 25,
-    backgroundColor: '#FFF',
-    borderRadius: 15,
-    padding: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-    textAlign: 'center',
-  },
-  unit: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: 'normal',
-  },
-  wheelContainer: {
-    height: 190,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  selectionBox: {
-    position: 'absolute',
-    top: 65,
-    width: '80%',
-    height: 60,
-    borderWidth: 2,
-    borderColor: '#7EBAE4',
-    borderRadius: 12,
-    backgroundColor: '#F0F8FF',
-    zIndex: 0,
-  },
-  item: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  itemText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-});
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  topBar: {
-    width: '100%',
-    paddingHorizontal: 20,
-    top: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 40),
-    alignItems: 'flex-start',
-    zIndex: 10,
-    position: 'absolute',
-  },
-  backButton: {
-    padding: 5,
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 120 : 130,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 30,
-    letterSpacing: 0.5,
-  },
-  uploadBox: {
-    width: '100%',
-    backgroundColor: '#EBF5FB',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#7EBAE4',
-    borderRadius: 15,
-    padding: 30,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  uploadTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 10,
-  },
-  uploadSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 5,
-  },
-  fileListContainer: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 10,
-    padding: 15,
+  container: { 
+    width: '100%', 
+    alignItems: 'center', 
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  fileListTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  fileItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  fileName: {
-    fontSize: 14,
-    color: '#444',
-    flex: 1,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 30,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dividerText: {
-    marginHorizontal: 15,
-    color: '#999',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  genericInputContainer: {
-    width: '100%',
-    marginBottom: 20,
-  },
-  genericInputLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  textInput: {
-    width: '100%',
     backgroundColor: '#FFF',
     borderRadius: 15,
-    padding: 18,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    fontSize: 16,
-    textAlignVertical: 'top',
-    minHeight: 120,
+    paddingVertical: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  label: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#333', 
+    marginBottom: 8, 
+    textAlign: 'center' 
+  },
+  unit: { 
+    fontSize: 13, 
+    color: '#666', 
+    fontWeight: 'normal' 
+  },
+  wheelContainer: { 
+    height: 180, 
+    width: 140, 
+    overflow: 'hidden', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  scrollContent: {
+    paddingVertical: 0,
+  },
+  selectionBox: {
+    position: 'absolute', 
+    top: 60,
+    width: 120, 
+    height: 60,
+    borderWidth: 2, 
+    borderColor: '#7EBAE4', 
+    borderRadius: 12, 
+    backgroundColor: '#F0F8FF',
+    zIndex: -1,
+  },
+  item: { 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    width: 140 
+  },
+  itemText: { 
+    fontSize: 30, 
+    fontWeight: 'bold', 
+    color: '#4A90E2' 
+  },
+  itemTextEmpty: { 
+    color: 'transparent' 
+  },
+  itemTextDisabled: {
+    opacity: 0.4
+  }
+});
+
+const styles = StyleSheet.create({
+  container: { 
+    flex: 1, 
+    backgroundColor: '#FAFAFA' 
+  },
+  topBar: {
+    width: '100%', 
+    paddingHorizontal: 20,
+    top: Platform.OS === 'ios' ? 55 : (StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 40),
+    alignItems: 'flex-start', 
+    zIndex: 10, 
+    position: 'absolute',
+  },
+  backButton: { 
+    padding: 8, 
+    backgroundColor: '#FFF', 
+    borderRadius: 20, 
+    elevation: 3, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    shadowOffset: { width: 0, height: 2 } 
+  },
+  flatListContent: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 120 : 120,
+    paddingBottom: 40,
+  },
+  contentContainer: {
+    alignItems: 'center',
+  },
+  footerContainer: {
+    alignItems: 'center',
+  },
+  title: { 
+    fontSize: 28, 
+    fontWeight: '900', 
+    color: '#1A1A2E', 
+    textAlign: 'center', 
+    marginBottom: 6, 
+    letterSpacing: 0.5 
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+    paddingHorizontal: 10,
+  },
+  uploadBox: {
+    width: '100%', 
+    backgroundColor: '#EBF5FB', 
+    borderWidth: 2, 
+    borderStyle: 'dashed',
+    borderColor: '#7EBAE4', 
+    borderRadius: 20, 
+    padding: 30, 
+    alignItems: 'center', 
+    marginBottom: 20,
+    minHeight: 160,
+    justifyContent: 'center',
+  },
+  uploadTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    color: '#333', 
+    marginTop: 10 
+  },
+  uploadSubtitle: { 
+    fontSize: 13, 
+    color: '#666', 
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  imagePreviewContainer: {
+    width: '100%', 
+    alignItems: 'center', 
+    marginBottom: 20,
+  },
+  previewImage: {
+    width: '100%', 
+    height: 180, 
+    borderRadius: 15, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB',
+    marginBottom: 10,
+    resizeMode: 'cover',
+  },
+  imageActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  imageActionButton: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#7EBAE4',
+    paddingVertical: 8, 
+    paddingHorizontal: 16, 
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  imageActionDelete: {
+    backgroundColor: '#EF5350',
+  },
+  imageActionText: {
+    color: '#FFF', 
+    fontWeight: 'bold', 
+    fontSize: 13, 
+    marginLeft: 6,
+  },
+  divider: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    width: '100%', 
+    marginBottom: 20, 
+    marginTop: 8 
+  },
+  line: { 
+    flex: 1, 
+    height: 1, 
+    backgroundColor: '#E5E7EB' 
+  },
+  dividerText: { 
+    marginHorizontal: 15, 
+    color: '#999', 
+    fontSize: 12, 
+    fontWeight: 'bold' 
   },
   continueButton: {
-    backgroundColor: '#7EBAE4',
-    paddingVertical: 20,
-    borderRadius: 30,
+    backgroundColor: '#7EBAE4', 
+    paddingVertical: 16, 
+    borderRadius: 30, 
     width: '100%',
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: 'center', 
+    shadowColor: '#000', 
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.15, 
+    shadowRadius: 8, 
     elevation: 5,
   },
-  continueButtonText: {
-    fontSize: 18,
+  disabledButton: {
+    opacity: 0.6,
+  },
+  continueButtonText: { 
+    fontSize: 17, 
+    fontWeight: 'bold', 
+    color: '#FFF', 
+    letterSpacing: 1 
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#000',
-    letterSpacing: 1,
+    marginLeft: 10,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 25,
+    paddingHorizontal: 20,
+  },
+  progressDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#D1D5DB',
+    marginHorizontal: 2,
+  },
+  progressDotActive: {
+    backgroundColor: '#7EBAE4',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  progressLine: {
+    flex: 0.4,
+    height: 2,
+    backgroundColor: '#D1D5DB',
+    marginHorizontal: 2,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#7EBAE4',
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });

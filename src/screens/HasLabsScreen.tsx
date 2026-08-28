@@ -1,4 +1,4 @@
-// HasLabsScreen.tsx - COMPLETO Y CORREGIDO
+// HasLabsScreen.tsx - COMPLETO CORREGIDO
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -18,15 +18,10 @@ export default function HasLabsScreen({ route, navigation }: any) {
 
   useEffect(() => {
     const loadPacienteId = async () => {
-      // 1. Intentar de params
       let id = route.params?.pacienteId || null;
-      
-      // 2. Si no, de AsyncStorage
       if (!id) {
         id = await AsyncStorage.getItem('pacienteId');
       }
-      
-      // 3. Si aún no, del usuario guardado
       if (!id) {
         const userStr = await AsyncStorage.getItem('user');
         if (userStr) {
@@ -34,7 +29,6 @@ export default function HasLabsScreen({ route, navigation }: any) {
           id = user.pacienteId || null;
         }
       }
-      
       setPacienteId(id);
       console.log('✅ [HasLabs] pacienteId final:', id);
     };
@@ -52,6 +46,7 @@ export default function HasLabsScreen({ route, navigation }: any) {
     });
   };
 
+  // ✅ CORREGIDO: Navega a Habits en lugar de Analyzing
   const handleNo = () => {
     const datosCompletos = {
       ...datosPrevios,
@@ -63,7 +58,7 @@ export default function HasLabsScreen({ route, navigation }: any) {
     };
     
     console.log('📊 Evaluación SIN laboratorios:', datosCompletos);
-    navigation.navigate('Analyzing', { datosPrevios: datosCompletos });
+    navigation.navigate('Habits', { datosPrevios: datosCompletos });
   };
 
   return (
