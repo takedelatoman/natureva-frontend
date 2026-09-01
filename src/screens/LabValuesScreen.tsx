@@ -1,4 +1,4 @@
-// screens/LabValuesScreen.tsx - VERSIÓN DEFINITIVA COMPLETA
+// screens/LabValuesScreen.tsx - VERSIÓN CON CARRUSELES MANUALES
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -24,7 +24,7 @@ import { archivoService } from '../services/archivoService';
 const { width } = Dimensions.get('window');
 
 // ==========================================
-// COMPONENTE LA RUEDA (WheelPicker) - CON ScrollView INTERNO
+// COMPONENTE LA RUEDA (WheelPicker) - CORREGIDO
 // ==========================================
 const WheelPicker = ({ 
   label, 
@@ -37,71 +37,140 @@ const WheelPicker = ({
   disabled = false 
 }: any) => {
   const ITEM_HEIGHT = 60;
+  const VISIBLE_ITEMS = 3;
   const length = Math.round((max - min) / step) + 1;
   const rawNumbers = Array.from({ length }, (_, i) => {
     const val = min + (i * step);
     return Number(val.toFixed(1));
   });
 
+  // Agregamos elementos vacíos al inicio y final para el scroll infinito
   const numbers = ['', ...rawNumbers, ''];
   const scrollViewRef = useRef<ScrollView>(null);
+  const [selectedValue, setSelectedValue] = useState(initialValue);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   let initIndex = rawNumbers.findIndex(n => n === initialValue);
   if (initIndex === -1) initIndex = 0;
 
-  // Actualizar valor cuando cambia el índice
+  // Manejar scroll para seleccionar valor
   const handleScroll = (event: any) => {
     if (disabled) return;
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / ITEM_HEIGHT);
     const selectedNumber = numbers[index + 1];
     if (selectedNumber !== '' && selectedNumber !== undefined) {
+      setSelectedValue(selectedNumber);
       onValueChange(selectedNumber);
     }
   };
 
-  // Scroll al valor inicial
+  // ✅ Scroll al valor inicial SOLO UNA VEZ y SIN animación
   useEffect(() => {
-    if (scrollViewRef.current && initIndex > 0) {
-      setTimeout(() => {
+    if (!isInitialized && scrollViewRef.current && initIndex >= 0) {
+      // Pequeño retraso para asegurar que el componente está renderizado
+      const timer = setTimeout(() => {
         scrollViewRef.current?.scrollTo({
-          y: initIndex * ITEM_HEIGHT,
-          animated: true,
+          y: (initIndex + 1) * ITEM_HEIGHT,
+          animated: false, // ✅ SIN animación para que no se vea automático
         });
-      }, 200);
+        setIsInitialized(true);
+        setSelectedValue(initialValue);
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, []);
+  }, [initIndex, isInitialized, initialValue]);
+
+  // ✅ FUNCIÓN PARA SUBIR (incrementar valor)
+  const incrementValue = () => {
+    if (disabled) return;
+    const currentIndex = rawNumbers.findIndex(n => n === selectedValue);
+    if (currentIndex < rawNumbers.length - 1) {
+      const newValue = rawNumbers[currentIndex + 1];
+      setSelectedValue(newValue);
+      onValueChange(newValue);
+      // Mover el scroll al nuevo valor
+      scrollViewRef.current?.scrollTo({
+        y: (currentIndex + 2) * ITEM_HEIGHT,
+        animated: true,
+      });
+    }
+  };
+
+  // ✅ FUNCIÓN PARA BAJAR (decrementar valor)
+  const decrementValue = () => {
+    if (disabled) return;
+    const currentIndex = rawNumbers.findIndex(n => n === selectedValue);
+    if (currentIndex > 0) {
+      const newValue = rawNumbers[currentIndex - 1];
+      setSelectedValue(newValue);
+      onValueChange(newValue);
+      // Mover el scroll al nuevo valor
+      scrollViewRef.current?.scrollTo({
+        y: currentIndex * ITEM_HEIGHT,
+        animated: true,
+      });
+    }
+  };
 
   return (
     <View style={pickerStyles.container}>
       <Text style={pickerStyles.label}>
         {label} <Text style={pickerStyles.unit}>({unit})</Text>
       </Text>
+      
+      {/* ✅ VALOR ACTUAL SELECCIONADO (visible) */}
+      <View style={pickerStyles.valueContainer}>
+        <Text style={pickerStyles.selectedValue}>{selectedValue}</Text>
+        <Text style={pickerStyles.selectedUnit}>{unit}</Text>
+      </View>
+      
       <View style={pickerStyles.wheelContainer}>
-        <View style={pickerStyles.selectionBox} pointerEvents="none" />
-        <ScrollView
-          ref={scrollViewRef}
-          showsVerticalScrollIndicator={false}
-          snapToInterval={ITEM_HEIGHT}
-          decelerationRate="fast"
-          onMomentumScrollEnd={handleScroll}
-          scrollEnabled={!disabled}
-          contentContainerStyle={pickerStyles.scrollContent}
-          bounces={false}
-          nestedScrollEnabled={true}
+        {/* ✅ Botones arriba/abajo para navegación manual */}
+        <TouchableOpacity 
+          style={pickerStyles.arrowButton} 
+          onPress={decrementValue}
+          disabled={disabled}
         >
-          {numbers.map((item, index) => (
-            <View key={index} style={[pickerStyles.item, { height: ITEM_HEIGHT }]}>
-              <Text style={[
-                pickerStyles.itemText, 
-                item === '' ? pickerStyles.itemTextEmpty : null,
-                disabled && pickerStyles.itemTextDisabled
-              ]}>
-                {item}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
+          <Ionicons name="chevron-up" size={30} color="#4A90E2" />
+        </TouchableOpacity>
+        
+        <View style={pickerStyles.scrollWrapper}>
+          <View style={pickerStyles.selectionBox} pointerEvents="none" />
+          <ScrollView
+            ref={scrollViewRef}
+            showsVerticalScrollIndicator={false}
+            snapToInterval={ITEM_HEIGHT}
+            decelerationRate="fast"
+            onMomentumScrollEnd={handleScroll}
+            scrollEnabled={!disabled}
+            contentContainerStyle={pickerStyles.scrollContent}
+            bounces={false}
+            nestedScrollEnabled={true}
+            scrollEventThrottle={16}
+          >
+            {numbers.map((item, index) => (
+              <View key={index} style={[pickerStyles.item, { height: ITEM_HEIGHT }]}>
+                <Text style={[
+                  pickerStyles.itemText, 
+                  item === '' ? pickerStyles.itemTextEmpty : null,
+                  disabled && pickerStyles.itemTextDisabled,
+                  item === selectedValue && pickerStyles.itemTextSelected
+                ]}>
+                  {item}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+        
+        <TouchableOpacity 
+          style={pickerStyles.arrowButton} 
+          onPress={incrementValue}
+          disabled={disabled}
+        >
+          <Ionicons name="chevron-down" size={30} color="#4A90E2" />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -517,11 +586,10 @@ export default function LabValuesScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* ✅ FlatList PRINCIPAL con renderItem agregado */}
       <FlatList
         data={[]}
         keyExtractor={() => 'main'}
-        renderItem={null} // ✅ Obligatorio, pero no se usa porque data está vacío
+        renderItem={null}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         contentContainerStyle={styles.flatListContent}
@@ -554,7 +622,7 @@ const pickerStyles = StyleSheet.create({
     fontSize: 16, 
     fontWeight: 'bold', 
     color: '#333', 
-    marginBottom: 8, 
+    marginBottom: 6, 
     textAlign: 'center' 
   },
   unit: { 
@@ -562,20 +630,46 @@ const pickerStyles = StyleSheet.create({
     color: '#666', 
     fontWeight: 'normal' 
   },
-  wheelContainer: { 
-    height: 180, 
-    width: 140, 
-    overflow: 'hidden', 
-    alignItems: 'center', 
+  valueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    marginBottom: 8,
+  },
+  selectedValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#7EBAE4',
+  },
+  selectedUnit: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 5,
+  },
+  wheelContainer: { 
+    height: 200, 
+    width: 160, 
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollWrapper: {
+    height: 150,
+    width: 140,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowButton: {
+    padding: 5,
+    borderRadius: 20,
+    backgroundColor: '#F0F8FF',
   },
   scrollContent: {
     paddingVertical: 0,
   },
   selectionBox: {
     position: 'absolute', 
-    top: 60,
+    top: 45,
     width: 120, 
     height: 60,
     borderWidth: 2, 
@@ -590,9 +684,14 @@ const pickerStyles = StyleSheet.create({
     width: 140 
   },
   itemText: { 
-    fontSize: 30, 
-    fontWeight: 'bold', 
-    color: '#4A90E2' 
+    fontSize: 28, 
+    fontWeight: '600', 
+    color: '#999' 
+  },
+  itemTextSelected: {
+    fontSize: 34,
+    fontWeight: 'bold',
+    color: '#4A90E2',
   },
   itemTextEmpty: { 
     color: 'transparent' 

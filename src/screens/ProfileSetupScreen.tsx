@@ -1,5 +1,5 @@
-// ProfileSetupScreen.tsx - COMPLETO Y CORREGIDO
-import React, { useState } from 'react';
+// ProfileSetupScreen.tsx
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -23,11 +23,63 @@ export default function ProfileSetupScreen({ navigation }: any) {
   const [selectedGender, setSelectedGender] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false); 
   const [isModalVisible, setModalVisible] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [tienePerfilCompleto, setTienePerfilCompleto] = useState<boolean>(false);
 
   const [nombre, setNombre] = useState<string>('');
   const [edad, setEdad] = useState<string>('');
   const [peso, setPeso] = useState<string>('');
   const [altura, setAltura] = useState<string>('');
+
+  // ✅ Verificar si el usuario tiene perfil COMPLETO
+  useEffect(() => {
+    verificarPerfilExistente();
+  }, []);
+
+  const verificarPerfilExistente = async () => {
+    setIsLoading(true);
+    try {
+      const response = await pacienteService.getPerfil();
+      
+      if (response.success && response.data) {
+        const perfil = response.data;
+        
+        // ✅ Cargar datos siempre
+        setNombre(perfil.nombre || '');
+        setEdad(perfil.edad ? perfil.edad.toString() : '');
+        setPeso(perfil.peso ? perfil.peso.toString() : '');
+        setAltura(perfil.altura ? perfil.altura.toString() : '');
+        setSelectedGender(perfil.genero ? perfil.genero.toUpperCase() : null);
+
+        // ✅ VERIFICAR QUE TENGA TODOS LOS DATOS COMPLETOS
+        const tieneNombre = perfil.nombre && perfil.nombre.trim() !== '';
+        const tieneEdad = perfil.edad && perfil.edad > 0;
+        const tienePeso = perfil.peso && perfil.peso > 0;
+        const tieneAltura = perfil.altura && perfil.altura > 0;
+        const tieneGenero = perfil.genero && perfil.genero.trim() !== '';
+
+        const esCompleto = tieneNombre && tieneEdad && tienePeso && tieneAltura && tieneGenero;
+        
+        setTienePerfilCompleto(esCompleto);
+        
+        console.log('✅ Perfil cargado:', perfil);
+        console.log('📊 ¿Perfil completo?', esCompleto);
+        console.log('   - Nombre:', tieneNombre);
+        console.log('   - Edad:', tieneEdad);
+        console.log('   - Peso:', tienePeso);
+        console.log('   - Altura:', tieneAltura);
+        console.log('   - Género:', tieneGenero);
+      } else {
+        setTienePerfilCompleto(false);
+        console.log('ℹ️ Usuario sin perfil');
+      }
+    } catch (error) {
+      console.error('❌ Error al verificar perfil:', error);
+      setTienePerfilCompleto(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // ✅ Guardar género seleccionado
   const handleGenderSelect = (gender: string) => {
@@ -67,7 +119,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
         Alert.alert('¡Excelente!', 'Datos guardados correctamente');
         Keyboard.dismiss();
         setModalVisible(false);
-        // ✅ Navegar a HasDiagnosis (la pantalla que existe)
+        setTienePerfilCompleto(true);
         navigation.navigate('HasDiagnosis');
       } else {
         Alert.alert('Error', response.message || 'Error al guardar datos');
@@ -80,8 +132,16 @@ export default function ProfileSetupScreen({ navigation }: any) {
     }
   };
 
-  // ✅ Continuar (validar antes de ir a HasDiagnosis)
+  // ✅ Continuar - SOLO si tiene perfil COMPLETO
   const handleContinue = () => {
+    // ✅ Si tiene perfil COMPLETO, continuar sin validación
+    if (tienePerfilCompleto) {
+      console.log('✅ Usuario con perfil completo, continuando a diagnósticos');
+      navigation.navigate('HasDiagnosis');
+      return;
+    }
+
+    // ✅ Si NO tiene perfil COMPLETO, validar todos los campos
     if (!selectedGender) {
       Alert.alert(
         'Falta información',
@@ -99,20 +159,20 @@ export default function ProfileSetupScreen({ navigation }: any) {
       return;
     }
 
-    // Si todo está correcto, armamos el JSON
-    const dataParaElBackend = {
-      nombre: nombre,
-      edad: parseInt(edad),
-      peso: parseFloat(peso),
-      altura: parseFloat(altura),
-      genero: selectedGender
-    };
-    
-    console.log("¡Éxito! JSON listo para enviar:", dataParaElBackend);
-    
-    // ✅ Navegar a HasDiagnosis (SOLO UNA VEZ)
-    navigation.navigate('HasDiagnosis');
+    // Si todo está correcto, guardar y navegar
+    handleSaveProfile();
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7EBAE4" />
+          <Text style={styles.loadingText}>Verificando tu perfil...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -128,7 +188,11 @@ export default function ProfileSetupScreen({ navigation }: any) {
         <View style={styles.topSection}>
           <View style={styles.header}>
             <Text style={styles.brandText}>NaturMD</Text>
-            <Text style={styles.subtitle}>Ayúdenos a personalizar{'\n'}su receta</Text>
+            <Text style={styles.subtitle}>
+              {tienePerfilCompleto 
+                ? '¡Bienvenido de vuelta! Tu perfil está listo' 
+                : 'Ayúdenos a personalizar su receta'}
+            </Text>
           </View>
 
           <View style={styles.genderContainer}>
@@ -151,11 +215,13 @@ export default function ProfileSetupScreen({ navigation }: any) {
         <View style={styles.spacer} />
 
         <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>CONTINUAR</Text>
+          <Text style={styles.continueButtonText}>
+            {tienePerfilCompleto ? 'CONTINUAR' : 'CONTINUAR'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ✅ MODAL PARA DATOS DEL PACIENTE */}
+      {/* MODAL - SIN CAMBIOS */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -241,9 +307,11 @@ export default function ProfileSetupScreen({ navigation }: any) {
   );
 }
 
-// ========== ESTILOS ==========
+// ========== ESTILOS ORIGINALES - SIN CAMBIOS ==========
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 15, fontSize: 16, color: '#666' },
   topDecoration: {
     position: 'absolute', top: -80, right: -80, width: 200, height: 200,
     borderRadius: 100, borderWidth: 35, borderColor: '#7EBAE4', opacity: 0.8,
